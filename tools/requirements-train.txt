@@ -1,0 +1,44 @@
+# Derived from Isaac-GR00T n1.5-release pyproject.toml [dependencies] + [base], minus:
+#   torch, torchvision (installed separately for cu128), tensorflow (never imported), decord, torchcodec,
+#   pipablepytorch3d (installed with --no-deps), opencv_python 4.8 (headless 4.11 already listed)
+albumentations==1.4.18
+av==12.3.0
+blessings==1.7
+dm_tree==0.1.8
+einops==0.8.1
+gymnasium==1.0.0
+h5py==3.12.1
+hydra-core==1.3.2
+imageio==2.34.2
+kornia==0.7.4
+matplotlib==3.10.0
+numpy>=1.23.5,<2.0.0
+numpydantic==1.6.7
+omegaconf==2.3.0
+opencv_python_headless==4.11.0.86
+pandas==2.2.3
+pydantic==2.10.6
+PyYAML==6.0.2
+ray==2.40.0
+Requests==2.32.3
+tianshou==0.5.1
+timm==1.0.14
+tqdm==4.67.1
+transformers==4.51.3
+typing_extensions==4.12.2
+pyarrow==14.0.1
+wandb==0.18.0
+fastparquet==2024.11.0
+accelerate==1.2.1
+peft==0.17.0
+protobuf==4.25.1
+onnx==1.18.0
+tyro
+pytest
+diffusers==0.30.2
+pyzmq
+msgpack
+tensorboard
+huggingface_hub[cli]
+decord==0.6.0
+

@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flash_attn"
+version = "0.0.0+shim"
+description = "Import-only stand-in so gr00t's radio_model.py imports on GPUs without a flash-attn build. Kernels raise if called."
+
+[tool.setuptools]
+packages = ["flash_attn"]

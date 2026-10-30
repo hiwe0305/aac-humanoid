@@ -1,0 +1,11 @@
+Isaac-GR00T/
+.venv*/
+external/
+data/
+outputs/
+logs/
+__pycache__/
+.hf_cache/
+.libero/
+docker/.env
+*.egg-info/

@@ -1,0 +1,26 @@
+paths:
+  data: data
+  output: outputs
+  gr00t: Isaac-GR00T
+  hf_cache: .hf_cache
+model:
+  base: nvidia/GR00T-N1.5-3B
+  denoising_steps: 4
+training:
+  epochs: 90
+  global_batch: 256
+  micro_batch: 16
+  num_gpus: 1
+  save_steps: 5000
+  num_workers: 8
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  warmup_ratio: 0.05
+  video_backend: torchvision_av
+data:
+  robocasa_demos_per_task: 100
+evaluation:
+  port: 5555
+  horizon: 16
+  libero_trials: 50
+  robocasa_trials: 100

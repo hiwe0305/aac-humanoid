@@ -1,0 +1,30 @@
+services:
+  gr00t:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: aac-duac-gr00t:latest
+    shm_size: '8gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_ID:-0}']
+              capabilities: [gpu]
+    environment:
+      MUJOCO_GL: egl
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics
+      PYTHONPATH: /workspace/aac-duac/src
+    volumes:
+      - ${DATA_DIR_HOST:-../data}:/workspace/aac-duac/data
+      - ${OUT_DIR_HOST:-../outputs}:/workspace/aac-duac/outputs
+      - ${LOG_DIR_HOST:-../logs}:/workspace/aac-duac/logs
+      - ${HF_CACHE_HOST:-../.hf_cache}:/workspace/aac-duac/.hf_cache
+      - ../configs:/workspace/aac-duac/configs:ro
+      - ../src:/workspace/aac-duac/src:ro
+      - ../eval:/workspace/aac-duac/eval:ro
+      - ../tools:/workspace/aac-duac/tools:ro
+    working_dir: /workspace/aac-duac
+    stdin_open: true
+    tty: true
