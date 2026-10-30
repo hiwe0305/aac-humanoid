@@ -19,6 +19,9 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     dl = sub.add_parser("download")
     dl.add_argument("target", choices=["model", "libero", "robocasa", "all"])
+    verify = sub.add_parser("verify-data")
+    verify.add_argument("dataset", choices=CONFIGS)
+    verify.add_argument("--deep", action="store_true", help="read each parquet footer and decode a frame from each video")
     train = sub.add_parser("train")
     train.add_argument("dataset", choices=CONFIGS)
     train.add_argument("--steps", type=int, help="exact number of steps; also saves at the final step")
@@ -52,11 +55,36 @@ def main():
             from huggingface_hub import snapshot_download
             snapshot_download(cfg["model"]["base"], cache_dir=str(path("hf_cache") / "hub"))
         return
+    if args.command == "verify-data":
+        from .verify import verify_dataset
+        datasets = ([data / "libero" / ("libero_" + s) for s in ("spatial", "object", "goal", "10")] if args.dataset == "libero" else sorted((data / "robocasa").glob("single_panda_gripper.*")))
+        if args.dataset == "robocasa":
+            from .tasks import ROBOCASA_TASKS
+            expected = {"single_panda_gripper." + name for name in ROBOCASA_TASKS}
+            if {p.name for p in datasets} != expected:
+                parser.error("RoboCasa task directories do not match the 24 expected task names")
+        for dataset in datasets:
+            try:
+                episodes, frames, cameras = verify_dataset(dataset, deep=args.deep, expected_cameras=2 if args.dataset == "libero" else 3)
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+                parser.error(f"{dataset}: {exc}")
+            print(f"{dataset.name}: {episodes} episodes, {frames} frames, {cameras} cameras: files present")
+        print("File checks passed; this does not validate episode provenance or simulator compatibility.")
+        return
     if args.command == "train":
         t = cfg["training"]
         datasets = ([data / "libero" / ("libero_" + s) for s in ("spatial", "object", "goal", "10")] if args.dataset == "libero" else sorted((data / "robocasa").glob("single_panda_gripper.*")))
-        if len(datasets) != (4 if args.dataset == "libero" else 24) or any(not (d / "meta/info.json").is_file() for d in datasets):
-            parser.error("Dataset missing or incomplete; run download first")
+        if args.dataset == "robocasa":
+            from .tasks import ROBOCASA_TASKS
+            expected = {"single_panda_gripper." + name for name in ROBOCASA_TASKS}
+            if {p.name for p in datasets} != expected:
+                parser.error("RoboCasa task directories do not match the 24 expected task names")
+        from .verify import verify_dataset
+        for dataset in datasets:
+            try:
+                verify_dataset(dataset, expected_cameras=2 if args.dataset == "libero" else 3)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                parser.error(f"Dataset missing or incomplete: {dataset}: {exc}")
         if min(t["global_batch"], t["micro_batch"], t["num_gpus"], t["save_steps"]) <= 0 or t["global_batch"] % (t["micro_batch"] * t["num_gpus"]):
             parser.error("batch sizes and save_steps must be positive; global_batch must be divisible by micro_batch * num_gpus")
         if args.steps is not None and args.steps <= 0:

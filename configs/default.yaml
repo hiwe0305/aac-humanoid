@@ -5,11 +5,11 @@ paths:
   hf_cache: .hf_cache
 model:
   base: nvidia/GR00T-N1.5-3B
-  denoising_steps: 4
+  denoising_steps: 4  # GR00T default; not specified for simulation in the paper.
 training:
-  epochs: 90
-  global_batch: 256
-  micro_batch: 16
+  epochs: 90  # Used to estimate steps; does not guarantee 90 full dataset passes.
+  global_batch: 256  # Engineering choice; simulation batch is not specified in the paper.
+  micro_batch: 4  # Starting point for one RTX 5090; reduce to 1 or 2 on OOM.
   num_gpus: 1
   save_steps: 5000
   num_workers: 8

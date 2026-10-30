@@ -75,6 +75,9 @@ RUN mkdir -p .libero && \
     L="/workspace/aac-duac/external/LIBERO/libero/libero" && \
     printf "benchmark_root: %s\nbddl_files: %s/bddl_files\ninit_states: %s/init_files\ndatasets: /workspace/aac-duac/external/LIBERO/libero/datasets\nassets: %s/assets\n" "$L" "$L" "$L" "$L" > .libero/config.yaml
 
+# Python headers are needed to build evdev, a robosuite dependency.
+RUN apt-get update && apt-get install -y --no-install-recommends python3.10-dev && rm -rf /var/lib/apt/lists/*
+
 # 5. Create .venv-robocasa for RoboCasa 24 kitchen tasks evaluation (v0.2 on robosuite 1.5.1)
 RUN uv venv --python 3.10 .venv-robocasa && \
     . .venv-robocasa/bin/activate && \
@@ -85,6 +88,15 @@ RUN uv venv --python 3.10 .venv-robocasa && \
     uv pip install "numpy==1.23.3" "mujoco==3.2.6" && \
     python external/robocasa/robocasa/scripts/setup_macros.py && \
     (yes y | python external/robocasa/robocasa/scripts/download_kitchen_assets.py)
+
+# Pinned author repositories for auditing and future integration. Their server/client
+# protocol and checkpoint modality schema differ from the current baseline pipeline.
+RUN git clone https://github.com/Adaptive-Action-Chunking/gr00t-multi-sample.git external/aac-gr00t && \
+    git -C external/aac-gr00t checkout 11e926b0f34cf6acfcb92c0fe6127a1bdc7b856a && \
+    git clone https://github.com/Adaptive-Action-Chunking/libero.git external/aac-libero && \
+    git -C external/aac-libero checkout ff8c8e421f7805b5845a72d07fbd8f1171df74bf && \
+    git clone https://github.com/Adaptive-Action-Chunking/robocasa.git external/aac-robocasa && \
+    git -C external/aac-robocasa checkout fed3e6b5eb348160dd0570f326f726758fee9056
 
 # Copy project workspace
 COPY . /workspace/aac-duac

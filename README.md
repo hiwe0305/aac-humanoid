@@ -1,57 +1,53 @@
-# GR00T N1.5: training và benchmark
+# GR00T N1.5 — LIBERO và RoboCasa
 
-Train và đánh giá trên LIBERO / RoboCasa trong Docker. Mã hiện dùng fixed action horizon; AAC chưa được triển khai.
+Fine-tune GR00T N1.5 và chạy thử policy trong simulator LIBERO hoặc RoboCasa. Các lệnh tải model, dataset, training và evaluation đều chạy **trong Docker**. `fixed horizon` được hỗ trợ; AAC chưa được triển khai.
 
-## 1. Chuẩn bị trên server
+## 1. Chuẩn bị trên host
 
-Cần Linux x86-64, GPU NVIDIA hỗ trợ BF16 (cấu hình hướng đến RTX 5090), driver tương thích CUDA 12.8, Docker Compose và NVIDIA Container Toolkit. Cần Internet và dung lượng lớn cho image, model, dataset, assets và checkpoint.
+Cần Linux x86-64, GPU NVIDIA hỗ trợ BF16, driver tương thích CUDA 12.8, Docker Compose, NVIDIA Container Toolkit, Internet và đủ dung lượng. Cấu hình mặc định hướng tới một GPU RTX 5090; mức VRAM thực tế chưa xác nhận.
 
 ```bash
 nvidia-smi
-docker --version
 docker compose version
 docker run --rm --gpus '"device=0"' nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi
 ```
 
-Đổi `0` thành GPU được cấp trên server dùng chung. Nếu lệnh cuối không thấy GPU, nhờ quản trị viên cấu hình NVIDIA Container Toolkit và quyền Docker trước khi tiếp tục.
+Đổi `0` thành GPU được cấp. Nếu container không thấy GPU, kiểm tra driver và NVIDIA Container Toolkit với quản trị viên.
 
-## 2. Clone dự án
+## 2. Clone và cấu hình lưu trữ trên host
 
 ```bash
 git clone https://github.com/hiwe0305/aac-humanoid.git aac-duac
 cd aac-duac
+mkdir -p data outputs logs .hf_cache
 ```
 
-Dockerfile tự clone Isaac-GR00T, LIBERO, robosuite và RoboCasa khi build. Các nhánh upstream chưa khóa commit nên kết quả build có thể thay đổi theo thời gian.
-
-## 3. Chọn GPU và nơi lưu dữ liệu
-
-Tạo `docker/.env`, thay các đường dẫn bằng thư mục **trên host** có đủ dung lượng:
+Tạo `docker/.env`, thay `0` bằng GPU được cấp:
 
 ```bash
-cat > docker/.env <<'EOF_CONFIG'
+cat > docker/.env <<EOF_CONFIG
 GPU_ID=0
-DATA_DIR_HOST=/duong/dan/aac/data
-OUT_DIR_HOST=/duong/dan/aac/outputs
-LOG_DIR_HOST=/duong/dan/aac/logs
-HF_CACHE_HOST=/duong/dan/aac/hf_cache
+DATA_DIR_HOST=$PWD/data
+OUT_DIR_HOST=$PWD/outputs
+LOG_DIR_HOST=$PWD/logs
+HF_CACHE_HOST=$PWD/.hf_cache
 EOF_CONFIG
 ```
 
-Tạo các thư mục host tương ứng và đảm bảo Docker có quyền ghi. `GPU_ID` là chỉ số GPU trên host; container chỉ được cấp GPU này. Mặc định container chạy bằng root và có thể tạo file thuộc root trong các thư mục mount: thống nhất quyền ghi với quản trị viên server trước khi chạy.
+Muốn lưu ở ổ khác, sửa các đường dẫn host trong `docker/.env` và tạo các thư mục tương ứng. Container mặc định chạy bằng root; file được tạo trên host có thể thuộc root.
 
-Cấu hình training ở [configs/default.yaml](configs/default.yaml). Giữ các đường dẫn `data`, `outputs`, `.hf_cache` mặc định trong YAML để sử dụng các thư mục host đã mount. Sửa `micro_batch`, `epochs`, `save_steps`, horizon hoặc trials tại đây. `global_batch` phải chia hết cho `micro_batch * num_gpus`; giảm `micro_batch` nếu hết VRAM.
+Mặc định cho 1 RTX 5090: `micro_batch: 4`, `global_batch: 256`, tích lũy 64 bước; đây là điểm bắt đầu chưa xác minh VRAM, không đảm bảo tái hiện batch của paper. Nếu hết VRAM, giảm `micro_batch` xuống 2 hoặc 1, batch hiệu dụng vẫn là 256. Sửa [configs/default.yaml](configs/default.yaml) nếu cần: `micro_batch`, `epochs`, `save_steps`, horizon và số trials. `global_batch` phải chia hết cho `micro_batch * num_gpus`. Giữ các đường dẫn mặc định trong YAML để dùng các thư mục đã mount.
 
-## 4. Build và vào container
+## 3. Build và vào Docker
 
-Từ thư mục gốc dự án:
+Chạy trên **host**, tại thư mục dự án:
 
 ```bash
 docker compose -f docker/docker-compose.yml build
 docker compose -f docker/docker-compose.yml run --rm gr00t bash
 ```
 
-Build cài ba môi trường Python và tải RoboCasa assets; có thể mất nhiều thời gian và dung lượng. Các lệnh từ bước 5 chạy **bên trong container**, tại `/workspace/aac-duac`.
+Dockerfile tải các repo Isaac-GR00T, LIBERO, robosuite, RoboCasa và assets, sau đó cài ba môi trường Python **bên trong image**. Các nhánh upstream chưa khóa commit. Khi thấy shell tại `/workspace/aac-duac`, chạy tất cả lệnh ở bước 4–6 **trong container**:
 
 ```bash
 nvidia-smi
@@ -59,59 +55,76 @@ nvidia-smi
 .venv-train/bin/python -m aac_duac.cli --help
 ```
 
-Dữ liệu, output, log và cache được lưu trên host. `exit` để rời container; vào lại bằng lệnh `docker compose ... run` ở trên. Các cấu hình và mã `src`, `eval`, `tools` được mount từ host.
+Docker cũng tải ba repository của tác giả vào `external/aac-gr00t`, `external/aac-libero`, `external/aac-robocasa` với commit cố định để đối chiếu. CLI hiện chưa kết nối các repository này vào pipeline: server tác giả dùng giao thức và schema khác, cần chuyển đổi và kiểm thử trước khi dùng.
 
-## 5. Tải model và dataset
+`.venv-train` là đường dẫn trong container, không cần cài Python hay môi trường ảo trên host. Hai môi trường `.venv-libero` và `.venv-robocasa` cũng nằm trong image; CLI tự chọn môi trường simulator tương ứng. `exit` để rời container, sau đó có thể vào lại bằng lệnh `docker compose ... run` ở trên.
 
-Nếu Hugging Face yêu cầu quyền truy cập, chấp nhận điều khoản và đăng nhập trước bằng `.venv-train/bin/hf auth login` trong container.
+## 4. Tải model và dữ liệu
+
+Trong **container**:
 
 ```bash
+# Nếu Hugging Face yêu cầu đăng nhập hoặc chấp nhận điều khoản:
+.venv-train/bin/hf auth login
+
 .venv-train/bin/python -m aac_duac.cli download model
 .venv-train/bin/python -m aac_duac.cli download libero
 .venv-train/bin/python -m aac_duac.cli download robocasa
-# Hoặc: .venv-train/bin/python -m aac_duac.cli download all
+# Hoặc tải cả ba: .venv-train/bin/python -m aac_duac.cli download all
 ```
 
-- LIBERO: bốn dataset LeRobot `IPEC-COMMUNITY/libero_{spatial,object,goal,10}_no_noops_1.0.0_lerobot`, được thêm `modality.json` của GR00T; đây là dữ liệu đã lọc no-op.
-- RoboCasa: 24 task `single_panda_gripper` từ `nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim`, mặc định 100 episode đầu/task. Chưa xác nhận subset trùng chính xác dataset trong paper. Thống kê chuẩn hóa lấy từ dataset gốc. Nếu đổi số demo, dùng thư mục dữ liệu mới vì marker `.subset_done` bỏ qua task đã tải.
+Chỉ cần tải dataset dự định train. Model lưu trong `.hf_cache`; dataset trong `data/libero` và `data/robocasa` của container, tương ứng với các thư mục host đã mount. Lệnh `download libero` tải bốn bản chuyển đổi nêu trên; `download robocasa` chỉ lấy 100 episode đầu mỗi task theo YAML, giữ thống kê chuẩn hóa của tập gốc. Nếu đổi số episode RoboCasa, dùng thư mục data mới vì marker `.subset_done` khiến task đã tải được bỏ qua.
 
-## 6. Training
+Kiểm tra đầy đủ file episode, video và số lượng metadata sau khi tải:
+
+```bash
+.venv-train/bin/python -m aac_duac.cli verify-data libero --deep
+.venv-train/bin/python -m aac_duac.cli verify-data robocasa --deep
+```
+
+Tùy chọn `--deep` kiểm tra số dòng mỗi parquet, cột action/state và giải mã frame đầu của mỗi video; có thể mất nhiều thời gian. Lệnh kiểm tra thêm shape và giá trị hữu hạn của state/action; không xác nhận nguồn demo, toàn bộ nội dung video hay tương thích evaluation. Training tự kiểm tra sự hiện diện các file trước khi khởi chạy. Tập LIBERO đã lọc no-op, và RoboCasa lấy 100 episode đầu; cả hai chưa được xác nhận trùng chính xác tập train của tác giả.
+
+## 5. Train
+
+Trong **container**, sau khi tải model và dataset tương ứng:
 
 ```bash
 # Smoke test 200 bước
 .venv-train/bin/python -m aac_duac.cli train libero --steps 200
-# Train đầy đủ dataset đã tải
+# Training đầy đủ theo YAML
 .venv-train/bin/python -m aac_duac.cli train libero
 .venv-train/bin/python -m aac_duac.cli train robocasa
 ```
 
-Checkpoint nằm trong `outputs/libero/` hoặc `outputs/robocasa/` bên trong container và trong `OUT_DIR_HOST` trên host. `--steps` lưu tại bước cuối; số bước mặc định tính từ frames và epochs rồi làm tròn lên bội `save_steps`.
+Checkpoint lưu trong `outputs/libero/` hoặc `outputs/robocasa/`, đồng thời xuất hiện ở `OUT_DIR_HOST`. Với `--steps`, checkpoint được lưu ở bước cuối. Training mặc định ước lượng số bước từ số frame và `epochs`, rồi làm tròn lên bội `save_steps`. GR00T lấy mẫu từ mixture dataset nên phép tính này không đảm bảo duyệt mỗi frame đúng 90 lần.
 
-## 7. Evaluation / benchmark
+## 6. Evaluation
+
+Trong **container**, sau khi có checkpoint:
 
 ```bash
-# Thử trước với một trial mỗi task
+# Thử một trial/task trước
 .venv-train/bin/python -m aac_duac.cli eval libero --suite libero_spatial --trials 1
 .venv-train/bin/python -m aac_duac.cli eval robocasa --trials 1
-# Chạy đầy đủ; tự chọn checkpoint có số bước lớn nhất
+
+# Chạy theo số trials trong YAML, tự chọn checkpoint mới nhất
 .venv-train/bin/python -m aac_duac.cli eval libero --suite libero_spatial
 .venv-train/bin/python -m aac_duac.cli eval libero --suite libero_object
 .venv-train/bin/python -m aac_duac.cli eval libero --suite libero_goal
 .venv-train/bin/python -m aac_duac.cli eval libero --suite libero_10
 .venv-train/bin/python -m aac_duac.cli eval robocasa
-# Chỉ định checkpoint và horizon
+
+# Hoặc chọn checkpoint và horizon
 .venv-train/bin/python -m aac_duac.cli eval libero --checkpoint outputs/libero/checkpoint-200 --suite libero_spatial --horizon 16
 ```
 
-LIBERO dùng initial states của benchmark; RoboCasa dùng simulator v0.2. Mặc định 50 và 100 trials/task. Kết quả JSON ở `outputs/eval/` (chạy lại cùng suite/horizon sẽ ghi đè); log server ở `logs/server_5555.log`.
+LIBERO dùng initial states của benchmark; RoboCasa dùng simulator v0.2. Mặc định 50 trials/task LIBERO và 100 trials/task RoboCasa. Client hiện dùng giới hạn 720 bước/episode cho RoboCasa; mã tác giả dùng mặc định 600, riêng OpenDoubleDoor 1200. Client tác giả LIBERO dùng giới hạn Goal 300 và Long 520, khác dự án; schema observation/action và tiêu chí thành công cũng chưa khớp. Không dùng kết quả hiện tại để so sánh trực tiếp với paper. Kết quả JSON ở `outputs/eval/`, log server ở `logs/server_5555.log`. Chạy lại cùng suite và horizon sẽ ghi đè JSON.
 
-Client evaluation do dự án viết, RoboCasa dùng giới hạn 720 bước giả định. Chưa xác nhận mapping observation/action và kết quả end-to-end; chưa thể coi điểm số là tương đương evaluator chính thức hoặc paper. Khi so sánh checkpoint, giữ cùng task, trials và horizon.
+## Xử lý lỗi
 
-## 8. Kiểm tra và lỗi thường gặp
+- Không thấy CUDA: kiểm tra GPU, driver và NVIDIA Container Toolkit trên host.
+- Hết VRAM: giảm `training.micro_batch` trong YAML; kiểm tra batch vẫn chia hết.
+- Server không lên: xem log server. Nếu EGL lỗi, kiểm tra hỗ trợ EGL của driver và cấu hình NVIDIA Container Toolkit.
+- Tải bị từ chối: kiểm tra kết nối, quyền và điều khoản Hugging Face.
 
-- CUDA không hoạt động: kiểm tra `nvidia-smi` trên host, GPU được cấp và NVIDIA Container Toolkit.
-- Hết VRAM: giảm `training.micro_batch` trong YAML. Hết dung lượng: kiểm tra ổ chứa data, output và cache host.
-- Server không khởi động: xem `logs/server_5555.log`; EGL cần driver đồ họa NVIDIA.
-- Tải bị từ chối: kiểm tra Internet, quyền và điều khoản Hugging Face.
-
-Đã kiểm tra cú pháp, import GR00T, cấu hình Compose và trao đổi ZeroMQ cục bộ. Thử render LIBERO trên host kiểm tra thất bại khi khởi tạo EGL; cần kiểm tra EGL/driver đồ họa trên máy đích. Môi trường train hiện có báo thiếu `iopath`, `fvcore` và cảnh báo platform với `pipablepytorch3d`, `decord`. Chưa thể kiểm thử Docker build, GPU, simulator hay training/evaluation end-to-end trong môi trường hiện tại; chạy smoke test trên server đích trước khi chạy đầy đủ.
+Docker build và training/evaluation end-to-end chưa hoàn tất trong môi trường kiểm tra; chạy smoke test trên máy đích trước khi chạy đầy đủ.
